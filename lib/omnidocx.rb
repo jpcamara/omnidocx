@@ -40,16 +40,16 @@ module Omnidocx
       temp_file = Tempfile.new('docxedit-')
 
       #every docx file is ultimately a zip file with the extension as docx
-      @document_zip = Zip::File.new(doc_path)
+      document_zip = Zip::File.new(doc_path)
       #reading the document content xml from the zip
-      @document_content = @document_zip.read(DOCUMENT_FILE_PATH)
-      @document_xml = Nokogiri::XML @document_content
+      document_content = document_zip.read(DOCUMENT_FILE_PATH)
+      document_xml = Nokogiri::XML document_content
 
       #every docx file has one body tag which essentially contains all the content of the doc
-      @body = @document_xml.xpath("//w:body")
+      body = document_xml.xpath("//w:body")
 
-      @rel_doc = ""
-      @cont_type_doc = ""
+      rel_doc = ""
+      cont_type_doc = ""
 
       cnt = 20
       media_hash = {}
@@ -58,20 +58,20 @@ module Omnidocx
       media_content_type_hash = {}
 
 
-      @document_zip.entries.each do |e|
+      document_zip.entries.each do |e|
         if e.name == RELATIONSHIP_FILE_PATH
           in_stream = e.get_input_stream.read
-          @rel_doc = Nokogiri::XML in_stream    #Relationships XML
+          rel_doc = Nokogiri::XML in_stream    #Relationships XML
         end
         if e.name == CONTENT_TYPES_FILE
           in_stream = e.get_input_stream.read
-          @cont_type_doc = Nokogiri::XML in_stream  #Content types XML to be updated later on with the additional media type info
+          cont_type_doc = Nokogiri::XML in_stream  #Content types XML to be updated later on with the additional media type info
         end
       end
 
       Zip::OutputStream.open(temp_file.path) do |zos|
 
-        @document_zip.entries.each do |e|
+        document_zip.entries.each do |e|
           unless [DOCUMENT_FILE_PATH, RELATIONSHIP_FILE_PATH, CONTENT_TYPES_FILE].include?(e.name)
             #writing the files not needed to be edited back to the new zip
             zos.put_next_entry(e.name)
@@ -105,11 +105,11 @@ module Omnidocx
             zos.put_next_entry("word/media/image#{cnt}.#{extension}")
             zos.print data     #storing the image in the new zip
 
-            new_rel_node = Nokogiri::XML::Node.new("Relationship", @rel_doc)
+            new_rel_node = Nokogiri::XML::Node.new("Relationship", rel_doc)
             new_rel_node["Id"] = "rid#{cnt}"
             new_rel_node["Type"] = MEDIA_TYPE
             new_rel_node["Target"] = "media/image#{cnt}.#{extension}"
-            @rel_doc.at('Relationships').add_child(new_rel_node)      #adding a new relationship node to the relationships xml
+            rel_doc.at('Relationships').add_child(new_rel_node)      #adding a new relationship node to the relationships xml
 
             hdpi = img[:hdpi] || HORIZONTAL_DPI
             vdpi = img[:vdpi] || VERTICAL_DPI
@@ -119,8 +119,8 @@ module Omnidocx
             heightEmus = (img[:height].to_i / vdpi.to_i * EMUSPERINCH)
 
             #creating a new drawing element with info like rid, height, width,etc.
-            @image_element_xml = Nokogiri::XML IMAGE_ELEMENT
-            @image_element_xml.xpath("//w:drawing", NAMESPACES).each do |dr_node|
+            image_element_xml = Nokogiri::XML IMAGE_ELEMENT
+            image_element_xml.xpath("//w:drawing", NAMESPACES).each do |dr_node|
               docPr = dr_node.xpath(".//wp:docPr", NAMESPACES).last
               docPr["name"] = "image#{cnt}.#{extension}"
               docPr["id"] = "#{cnt}"
@@ -142,7 +142,7 @@ module Omnidocx
             end
 
             #appending the drawing element to the document's body
-            @body.children.last.add_previous_sibling(@image_element_xml.xpath("//w:p").last.to_xml)
+            body.children.last.add_previous_sibling(image_element_xml.xpath("//w:p").last.to_xml)
 
             media_hash[cnt] = index
           end
@@ -151,23 +151,23 @@ module Omnidocx
 
         #updating the content type info
         media_content_type_hash.each do |ext, cont_type|
-          new_default_node = Nokogiri::XML::Node.new("Default", @cont_type_doc)
+          new_default_node = Nokogiri::XML::Node.new("Default", cont_type_doc)
           new_default_node["Extension"] = ext
           new_default_node["ContentType"] = cont_type
-          @cont_type_doc.at("Types").add_child(new_default_node)
+          cont_type_doc.at("Types").add_child(new_default_node)
         end
 
         #writing the content types xml to the new zip
         zos.put_next_entry CONTENT_TYPES_FILE
-        zos.print @cont_type_doc.to_xml
+        zos.print cont_type_doc.to_xml
 
         #writing the relationships xml to the new zip
         zos.put_next_entry RELATIONSHIP_FILE_PATH
-        zos.print @rel_doc.to_xml
+        zos.print rel_doc.to_xml
 
         #writing the updated document content xml to the new zip
         zos.put_next_entry DOCUMENT_FILE_PATH
-        zos.print @document_xml.to_xml
+        zos.print document_xml.to_xml
       end
 
       #moving the temporary docx file to the final_path specified by the user
@@ -183,12 +183,12 @@ module Omnidocx
       end
 
       #first document to which the others will be appended (header/footer will be picked from this document)
-      @main_document_zip = Zip::File.new(documents_to_merge.first)
-      @main_document_xml = Nokogiri::XML(@main_document_zip.read(DOCUMENT_FILE_PATH))
-      @main_body = @main_document_xml.xpath("//w:body")
-      @rel_doc = ""
-      @cont_type_doc = ""
-      @style_doc = ""
+      main_document_zip = Zip::File.new(documents_to_merge.first)
+      main_document_xml = Nokogiri::XML(main_document_zip.read(DOCUMENT_FILE_PATH))
+      main_body = main_document_xml.xpath("//w:body")
+      rel_doc = ""
+      cont_type_doc = ""
+      style_doc = ""
       doc_cnt = 0
       #cnt variable to construct relationship ids, taken a high value 100 to avoid duplication
       cnt = 100
@@ -213,20 +213,20 @@ module Omnidocx
       additional_cont_type_entries = []
 
       # prepare initial set of data from first document
-      @main_document_zip.entries.each do |zip_entrie|
+      main_document_zip.entries.each do |zip_entrie|
         in_stream = zip_entrie.get_input_stream.read
 
         #Relationship XML
-        @rel_doc = Nokogiri::XML(in_stream) if zip_entrie.name == RELATIONSHIP_FILE_PATH
+        rel_doc = Nokogiri::XML(in_stream) if zip_entrie.name == RELATIONSHIP_FILE_PATH
 
         #Styles XML to be updated later on with the additional tables info
-        @style_doc = Nokogiri::XML(in_stream) if zip_entrie.name == STYLES_FILE_PATH
+        style_doc = Nokogiri::XML(in_stream) if zip_entrie.name == STYLES_FILE_PATH
 
         #Content types XML to be updated later on with the additional media type info
         if zip_entrie.name == CONTENT_TYPES_FILE
-          @cont_type_doc = Nokogiri::XML in_stream
-          default_nodes = @cont_type_doc.css "Default"
-          override_nodes = @cont_type_doc.css "Override"
+          cont_type_doc = Nokogiri::XML in_stream
+          default_nodes = cont_type_doc.css "Default"
+          override_nodes = cont_type_doc.css "Override"
           default_nodes.each { |node| default_extensions << node["Extension"] }
           override_nodes.each { |node| override_partnames << node["PartName"] }
         end
@@ -297,7 +297,7 @@ module Omnidocx
           end
 
           #updating the stlye ids in the table elements present in the document content XML
-          doc_content = doc_cnt == 0 ? @main_body : Nokogiri::XML(zip_file.read(DOCUMENT_FILE_PATH))
+          doc_content = doc_cnt == 0 ? main_body : Nokogiri::XML(zip_file.read(DOCUMENT_FILE_PATH))
           doc_content.xpath("//w:tbl").each do |tbl_node|
             style_last = tbl_node.xpath('.//w:tblStyle').last
             unless style_last.nil?
@@ -311,7 +311,7 @@ module Omnidocx
           zip_file.entries.each do |e|
             #updating the relationship ids with the new media file names in the relationships XML
             if e.name == RELATIONSHIP_FILE_PATH
-              rel_xml = doc_cnt == 0 ? @rel_doc : Nokogiri::XML(e.get_input_stream.read)
+              rel_xml = doc_cnt == 0 ? rel_doc : Nokogiri::XML(e.get_input_stream.read)
 
               rel_xml.css("Relationship").each do |node|
                 next unless node.values.to_s.include?("image")
@@ -328,14 +328,14 @@ module Omnidocx
                 else
                   # adding the extra relationship nodes for the media files to the relationship XML
                   new_rel_node = "<Relationship Id=#{new_id} Type=#{node["Type"]} Target=#{target_val} />"
-                  @rel_doc.at('Relationships').add_child(new_rel_node)
+                  rel_doc.at('Relationships').add_child(new_rel_node)
                 end
               end
             end
 
             #adding the table style information to the styles xml, if any tables present in the document being merged
             if e.name == STYLES_FILE_PATH
-              style_xml = doc_cnt == 0 ? @style_doc : Nokogiri::XML(e.get_input_stream.read)
+              style_xml = doc_cnt == 0 ? style_doc : Nokogiri::XML(e.get_input_stream.read)
               table_nodes = style_xml.xpath('//w:style').select{ |n| n.attributes["type"].value == "table" }
               table_nodes = table_nodes.select{ |n| n.attributes["styleId"].value != "TableNormal" } if doc_cnt != 0
 
@@ -345,7 +345,7 @@ module Omnidocx
                 style_id_attr.value = style_id_attr.value.gsub(/[0-9]+/, tab_val.to_s)
 
                 #adding extra table style nodes to the styles xml, if any tables present in the document being merged
-                @style_doc.xpath("//w:styles").children.last.add_next_sibling(table_node.to_xml) if doc_cnt != 0
+                style_doc.xpath("//w:styles").children.last.add_next_sibling(table_node.to_xml) if doc_cnt != 0
               end
             end
           end
@@ -369,12 +369,12 @@ module Omnidocx
             body_nodes = doc_content.xpath('//w:body').children[0..-2]
 
             #appending the body_nodes to main document's body
-            @main_body.children.last.add_previous_sibling(body_nodes.to_xml)
+            main_body.children.last.add_previous_sibling(body_nodes.to_xml)
           end
 
           #adding a page break after each documents being merged
           if page_break && doc_cnt < documents_to_merge_count - 1
-            @main_body.children.last.add_previous_sibling('<w:p><w:r><w:br w:type="page"/></w:r></w:p>')
+            main_body.children.last.add_previous_sibling('<w:p><w:r><w:br w:type="page"/></w:r></w:p>')
           end
 
           doc_cnt += 1
@@ -382,23 +382,23 @@ module Omnidocx
 
         #writing the updated styles XML to the new zip
         zos.put_next_entry(STYLES_FILE_PATH)
-        zos.print @style_doc.to_xml
+        zos.print style_doc.to_xml
 
         #writing the updated relationships XML to the new zip
         zos.put_next_entry(RELATIONSHIP_FILE_PATH)
-        zos.print @rel_doc.to_xml
+        zos.print rel_doc.to_xml
 
         zos.put_next_entry(CONTENT_TYPES_FILE)
         additional_cont_type_entries.each do |node|
           #adding addtional content type nodes to the content type XML
-          @cont_type_doc.at("Types").add_child(node)
+          cont_type_doc.at("Types").add_child(node)
         end
         #writing the updated content types XML to the new zip
-        zos.print @cont_type_doc.to_xml
+        zos.print cont_type_doc.to_xml
 
         #writing the updated document content XML to the new zip
         zos.put_next_entry(DOCUMENT_FILE_PATH)
-        zos.print @main_document_xml.to_xml
+        zos.print main_document_xml.to_xml
       end
 
       #moving the temporary docx file to the final_path specified by the user
@@ -406,19 +406,19 @@ module Omnidocx
     end
 
     def self.replace_doc_content(replacement_hash={}, template_path, final_path)
-      @template_zip = Zip::File.new(template_path)
-      @template_content = @template_zip.read(DOCUMENT_FILE_PATH)
+      template_zip = Zip::File.new(template_path)
+      template_content = template_zip.read(DOCUMENT_FILE_PATH)
 
       #replacing the keys with values in the document content xml
       replacement_hash.each do |key,value|
-        @template_content.force_encoding("UTF-8").gsub!(key,value)
+        template_content.force_encoding("UTF-8").gsub!(key,value)
       end
 
       temp_file = Tempfile.new('docxedit-')
 
       Zip::OutputStream.open(temp_file.path) do |zos|
 
-        @template_zip.entries.each do |e|
+        template_zip.entries.each do |e|
           unless e.name == DOCUMENT_FILE_PATH
             #writing the files not needed to be edited back to the new zip
             zos.put_next_entry(e.name)
@@ -428,7 +428,7 @@ module Omnidocx
 
         #writing the updated document content xml to the new zip
         zos.put_next_entry DOCUMENT_FILE_PATH
-        zos.print @template_content
+        zos.print template_content
       end
 
       #moving the temporary docx file to the final_path specified by the user
@@ -436,24 +436,24 @@ module Omnidocx
     end
 
     def self.replace_header_content(replacement_hash={}, template_path, final_path)
-      @template_zip = Zip::File.new(template_path)
+      template_zip = Zip::File.new(template_path)
 
-      @header_content = ''
-      @template_zip.entries.each do |e|
+      header_content = ''
+      template_zip.entries.each do |e|
         if e.name == HEADER_FILE_PATH
-          @header_content = e.get_input_stream.read
+          header_content = e.get_input_stream.read
         end
       end
 
       replacement_hash.each do |key,value|
-        @header_content.force_encoding("UTF-8").gsub!(key,value)
+        header_content.force_encoding("UTF-8").gsub!(key,value)
       end
 
       temp_file = Tempfile.new('docxedit-')
 
       Zip::OutputStream.open(temp_file.path) do |zos|
 
-        @template_zip.entries.each do |e|
+        template_zip.entries.each do |e|
           unless e.name == HEADER_FILE_PATH
             #writing the files not needed to be edited back to the new zip
             zos.put_next_entry(e.name)
@@ -463,7 +463,7 @@ module Omnidocx
 
         #writing the updated document content xml to the new zip
         zos.put_next_entry HEADER_FILE_PATH
-        zos.print @header_content
+        zos.print header_content
       end
 
       #moving the temporary docx file to the final_path specified by the user
@@ -471,24 +471,24 @@ module Omnidocx
     end
 
     def self.replace_footer_content(replacement_hash={}, template_path, final_path)
-      @template_zip = Zip::File.new(template_path)
+      template_zip = Zip::File.new(template_path)
 
-      @footer_content = ''
-      @template_zip.entries.each do |e|
+      footer_content = ''
+      template_zip.entries.each do |e|
         if e.name == FOOTER_FILE_PATH
-          @footer_content = e.get_input_stream.read
+          footer_content = e.get_input_stream.read
         end
       end
 
       replacement_hash.each do |key,value|
-        @footer_content.force_encoding("UTF-8").gsub!(key,value)
+        footer_content.force_encoding("UTF-8").gsub!(key,value)
       end
 
       temp_file = Tempfile.new('docxedit-')
 
       Zip::OutputStream.open(temp_file.path) do |zos|
 
-        @template_zip.entries.each do |e|
+        template_zip.entries.each do |e|
           unless e.name == FOOTER_FILE_PATH
             #writing the files not needed to be edited back to the new zip
             zos.put_next_entry(e.name)
@@ -498,7 +498,7 @@ module Omnidocx
 
         #writing the updated document content xml to the new zip
         zos.put_next_entry FOOTER_FILE_PATH
-        zos.print @footer_content
+        zos.print footer_content
       end
 
       #moving the temporary docx file to the final_path specified by the user
